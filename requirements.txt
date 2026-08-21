@@ -2,5 +2,3 @@ streamlit
 audio-recorder-streamlit
 openai
 python-dotenv
-pydub
-pyaudioop
