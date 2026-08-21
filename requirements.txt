@@ -4,4 +4,3 @@ faster-whisper
 openai
 python-dotenv
 pydub
-pyaudioop
