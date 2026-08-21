@@ -2,10 +2,11 @@ import streamlit as st
 import os
 import json
 import time
-import io  # Added for in-memory file handling
+import io
 from dotenv import load_dotenv
 from audio_recorder_streamlit import audio_recorder
 from openai import OpenAI
+from pydub import AudioSegment
 
 # ---------------------------------------------------------
 # 1. Page Configuration & Mobile UI Styling
@@ -186,7 +187,8 @@ with tab2:
         if st.button("Process Uploaded File", use_container_width=True, type="primary"):
             audio_data_to_process = uploaded_file.getvalue()
             # Extract the actual extension (e.g., .m4a)
-            _, audio_file_extension = os.path.splitext(uploaded_file.name) 
+            _, ext = os.path.splitext(uploaded_file.name) 
+            audio_file_extension = ext.lower()
             
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -201,19 +203,41 @@ if audio_data_to_process:
 
     if audio_data_to_process == audio_bytes:
         st.audio(audio_bytes, format="audio/wav")
-    
+        
+    # --- AUTOMATIC FORMAT CONVERSION (.m4a to .mp3) ---
+    if audio_file_extension == ".m4a":
+        with st.spinner("🔄 Converting Apple .m4a to .mp3 for Mistral..."):
+            try:
+                audio_segment = AudioSegment.from_file(io.BytesIO(audio_data_to_process), format="m4a")
+                mp3_buffer = io.BytesIO()
+                audio_segment.export(mp3_buffer, format="mp3")
+                audio_data_to_process = mp3_buffer.getvalue()
+                audio_file_extension = ".mp3"
+            except Exception as e:
+                st.error(f"Failed to convert audio. Ensure ffmpeg is installed. Error: {e}")
+                st.stop()
+    # --------------------------------------------------
+
     progress_bar = st.progress(10, text="📦 Step 1/4: Preparing audio stream...")
     
-    # Step 1: Multilingual Transcription via Voxtral (Using BytesIO)
+    # Step 1: Multilingual Transcription via Voxtral
     progress_bar.progress(35, text="🎧 Step 2/4: Transcribing audio (Voxtral)...")
     
     formatted_transcript = ""
     try:
         clean_filename = f"recording{audio_file_extension}"
         
-        # Create an in-memory file object and explicitly set its name so the SDK reads the MIME type correctly
-        file_payload = io.BytesIO(audio_data_to_process)
-        file_payload.name = clean_filename
+        # Explicitly map the MIME type so OpenAI SDK sends correct headers
+        mime_map = {
+            ".wav": "audio/wav",
+            ".mp3": "audio/mpeg",
+            ".ogg": "audio/ogg",
+            ".flac": "audio/flac"
+        }
+        mime_type = mime_map.get(audio_file_extension, "audio/wav")
+        
+        # Tuple format: (name, bytes, mime_type)
+        file_payload = (clean_filename, audio_data_to_process, mime_type)
         
         transcription = client.audio.transcriptions.create(
             model="mistralai/voxtral-mini-3b-2507",
