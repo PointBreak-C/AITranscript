@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import json
 import time
+import io  # Added for in-memory file handling
 from dotenv import load_dotenv
 from audio_recorder_streamlit import audio_recorder
 from openai import OpenAI
@@ -150,7 +151,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Variables to hold whichever audio source the user chooses
 audio_data_to_process = None
 audio_file_extension = ".wav"
 
@@ -185,7 +185,7 @@ with tab2:
         st.audio(uploaded_file)
         if st.button("Process Uploaded File", use_container_width=True, type="primary"):
             audio_data_to_process = uploaded_file.getvalue()
-            # Extract the actual extension (e.g., .mp3)
+            # Extract the actual extension (e.g., .m4a)
             _, audio_file_extension = os.path.splitext(uploaded_file.name) 
             
     st.markdown('</div>', unsafe_allow_html=True)
@@ -194,7 +194,7 @@ with tab2:
 # 4. Diskless Processing Pipeline
 # ---------------------------------------------------------
 if audio_data_to_process:
-    # Guard: Prevent empty/accidental clicks (a 1-second WAV is ~32KB. Anything <1KB is glitched).
+    # Guard: Prevent empty/accidental clicks
     if len(audio_data_to_process) < 1000:
         st.error("⚠️ Recording too short. Please try speaking for a few seconds.")
         st.stop()
@@ -204,14 +204,16 @@ if audio_data_to_process:
     
     progress_bar = st.progress(10, text="📦 Step 1/4: Preparing audio stream...")
     
-    # Step 1: Multilingual Transcription via Voxtral (Passing Bytes Directly)
+    # Step 1: Multilingual Transcription via Voxtral (Using BytesIO)
     progress_bar.progress(35, text="🎧 Step 2/4: Transcribing audio (Voxtral)...")
     
     formatted_transcript = ""
     try:
-        # We pass a strict filename format so the API knows exactly how to decode the bytes
         clean_filename = f"recording{audio_file_extension}"
-        file_payload = (clean_filename, audio_data_to_process)
+        
+        # Create an in-memory file object and explicitly set its name so the SDK reads the MIME type correctly
+        file_payload = io.BytesIO(audio_data_to_process)
+        file_payload.name = clean_filename
         
         transcription = client.audio.transcriptions.create(
             model="mistralai/voxtral-mini-3b-2507",
