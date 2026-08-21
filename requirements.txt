@@ -3,3 +3,4 @@ audio-recorder-streamlit
 faster-whisper
 openai
 python-dotenv
+pydub
