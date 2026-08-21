@@ -261,7 +261,7 @@ if audio_data_to_process:
         file_payload = (clean_filename, audio_data_to_process, mime_type)
         
         transcription = client.audio.transcriptions.create(
-            model="mistralai/voxtral-mini-3b-2507",
+            model="mistralai/voxtral-small-24b-2507-stt",
             file=file_payload,
             response_format="json" 
         )
