@@ -1,5 +1,4 @@
 import streamlit as st
-import tempfile
 import os
 import json
 import time
@@ -186,37 +185,39 @@ with tab2:
         st.audio(uploaded_file)
         if st.button("Process Uploaded File", use_container_width=True, type="primary"):
             audio_data_to_process = uploaded_file.getvalue()
-            # Extract the actual extension (e.g., .mp3) to ensure proper decoding
+            # Extract the actual extension (e.g., .mp3)
             _, audio_file_extension = os.path.splitext(uploaded_file.name) 
             
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 4. Processing Pipeline with Multi-Step Progress Bar
+# 4. Diskless Processing Pipeline
 # ---------------------------------------------------------
 if audio_data_to_process:
-    # Only render the audio player here if it came from the microphone
-    # (The file uploader already renders its own player above)
+    # Guard: Prevent empty/accidental clicks (a 1-second WAV is ~32KB. Anything <1KB is glitched).
+    if len(audio_data_to_process) < 1000:
+        st.error("⚠️ Recording too short. Please try speaking for a few seconds.")
+        st.stop()
+
     if audio_data_to_process == audio_bytes:
         st.audio(audio_bytes, format="audio/wav")
     
     progress_bar = st.progress(10, text="📦 Step 1/4: Preparing audio stream...")
     
-    with tempfile.NamedTemporaryFile(delete=False, suffix=audio_file_extension) as temp_file:
-        temp_file.write(audio_data_to_process)
-        audio_path = temp_file.name
-
-    # Step 1: Multilingual Transcription via Voxtral
+    # Step 1: Multilingual Transcription via Voxtral (Passing Bytes Directly)
     progress_bar.progress(35, text="🎧 Step 2/4: Transcribing audio (Voxtral)...")
     
     formatted_transcript = ""
     try:
-        with open(audio_path, "rb") as audio_file:
-            transcription = client.audio.transcriptions.create(
-                model="mistralai/voxtral-mini-3b-2507",
-                file=audio_file,
-                response_format="json" 
-            )
+        # We pass a strict filename format so the API knows exactly how to decode the bytes
+        clean_filename = f"recording{audio_file_extension}"
+        file_payload = (clean_filename, audio_data_to_process)
+        
+        transcription = client.audio.transcriptions.create(
+            model="mistralai/voxtral-mini-3b-2507",
+            file=file_payload,
+            response_format="json" 
+        )
         
         if hasattr(transcription, "segments") and transcription.segments:
             for seg in transcription.segments:
@@ -229,9 +230,6 @@ if audio_data_to_process:
         progress_bar.empty()
         st.error(f"Transcription failed: {e}")
         formatted_transcript = None
-    finally:
-        if os.path.exists(audio_path):
-            os.remove(audio_path)
 
     # Step 2: Intelligence Segregation via stealth/ox-alpha
     if formatted_transcript and formatted_transcript.strip():
