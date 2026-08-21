@@ -37,7 +37,7 @@ st.markdown("""
     /* App Header */
     .app-header {
         text-align: center;
-        margin-bottom: 2rem;
+        margin-bottom: 1.5rem;
     }
     .app-title {
         font-size: 1.8rem;
@@ -52,7 +52,7 @@ st.markdown("""
         margin-top: 0.3rem;
     }
 
-    /* Premium Recording Card */
+    /* Premium Recording & Upload Card */
     .recorder-box {
         display: flex;
         flex-direction: column;
@@ -61,7 +61,7 @@ st.markdown("""
         background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
         border: 1px solid #e2e8f0;
         border-radius: 28px;
-        padding: 2.5rem 1.5rem;
+        padding: 2rem 1.5rem;
         margin-bottom: 1.5rem;
         box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
     }
@@ -111,6 +111,12 @@ st.markdown("""
     .stProgress > div > div > div > div {
         border-radius: 12px;
     }
+    
+    /* Native looking Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2rem;
+        justify-content: center;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -136,7 +142,7 @@ client = OpenAI(
 )
 
 # ---------------------------------------------------------
-# 3. Header & Enhanced Audio Capture
+# 3. Header & Audio Input Options
 # ---------------------------------------------------------
 st.markdown("""
 <div class="app-header">
@@ -145,35 +151,59 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Styled recording wrapper
-st.markdown("""
-<div class="recorder-box">
-    <div class="record-prompt">Tap to Capture</div>
-""", unsafe_allow_html=True)
+# Variables to hold whichever audio source the user chooses
+audio_data_to_process = None
+audio_file_extension = ".wav"
 
-# Adding a static key="" prevents the first-click bug
-audio_bytes = audio_recorder(
-    text="",  # Hiding default text to use our custom UI
-    recording_color="#ef4444", # Vibrant red when recording
-    neutral_color="#3b82f6",   # Friendly blue when idle
-    icon_size="3x",            # Much larger, tappable target
-    pause_threshold=2.0,
-    sample_rate=16000,
-    key="main_recorder"        
-)
+tab1, tab2 = st.tabs(["🎙️ Record", "📁 Upload File"])
 
-st.markdown('</div>', unsafe_allow_html=True)
+with tab1:
+    st.markdown("""
+    <div class="recorder-box">
+        <div class="record-prompt">Tap to Capture</div>
+    """, unsafe_allow_html=True)
+
+    audio_bytes = audio_recorder(
+        text="",  
+        recording_color="#ef4444", 
+        neutral_color="#3b82f6",   
+        icon_size="3x",            
+        pause_threshold=2.0,
+        sample_rate=16000,
+        key="main_recorder"        
+    )
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    if audio_bytes:
+        audio_data_to_process = audio_bytes
+        audio_file_extension = ".wav"
+
+with tab2:
+    st.markdown('<div class="recorder-box">', unsafe_allow_html=True)
+    uploaded_file = st.file_uploader("Select an audio file", type=["wav", "mp3", "m4a", "ogg", "flac"])
+    
+    if uploaded_file:
+        st.audio(uploaded_file)
+        if st.button("Process Uploaded File", use_container_width=True, type="primary"):
+            audio_data_to_process = uploaded_file.getvalue()
+            # Extract the actual extension (e.g., .mp3) to ensure proper decoding
+            _, audio_file_extension = os.path.splitext(uploaded_file.name) 
+            
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # 4. Processing Pipeline with Multi-Step Progress Bar
 # ---------------------------------------------------------
-if audio_bytes:
-    st.audio(audio_bytes, format="audio/wav")
+if audio_data_to_process:
+    # Only render the audio player here if it came from the microphone
+    # (The file uploader already renders its own player above)
+    if audio_data_to_process == audio_bytes:
+        st.audio(audio_bytes, format="audio/wav")
     
     progress_bar = st.progress(10, text="📦 Step 1/4: Preparing audio stream...")
     
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
-        temp_file.write(audio_bytes)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=audio_file_extension) as temp_file:
+        temp_file.write(audio_data_to_process)
         audio_path = temp_file.name
 
     # Step 1: Multilingual Transcription via Voxtral
