@@ -3,10 +3,11 @@ import os
 import json
 import time
 import io
+import tempfile
+import subprocess
 from dotenv import load_dotenv
 from audio_recorder_streamlit import audio_recorder
 from openai import OpenAI
-from pydub import AudioSegment
 
 # ---------------------------------------------------------
 # 1. Page Configuration & Mobile UI Styling
@@ -193,7 +194,7 @@ with tab2:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 4. Diskless Processing Pipeline
+# 4. Processing Pipeline
 # ---------------------------------------------------------
 if audio_data_to_process:
     # Guard: Prevent empty/accidental clicks
@@ -204,19 +205,39 @@ if audio_data_to_process:
     if audio_data_to_process == audio_bytes:
         st.audio(audio_bytes, format="audio/wav")
         
-    # --- AUTOMATIC FORMAT CONVERSION (.m4a to .mp3) ---
+    # --- AUTOMATIC FORMAT CONVERSION (.m4a to .mp3) using native FFmpeg ---
     if audio_file_extension == ".m4a":
         with st.spinner("🔄 Converting Apple .m4a to .mp3 for Mistral..."):
             try:
-                audio_segment = AudioSegment.from_file(io.BytesIO(audio_data_to_process), format="m4a")
-                mp3_buffer = io.BytesIO()
-                audio_segment.export(mp3_buffer, format="mp3")
-                audio_data_to_process = mp3_buffer.getvalue()
+                # Write the m4a bytes to a temporary file
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".m4a") as f_in:
+                    f_in.write(audio_data_to_process)
+                    temp_in_path = f_in.name
+                
+                temp_out_path = temp_in_path.replace(".m4a", ".mp3")
+                
+                # Run FFmpeg command directly on the system
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", temp_in_path, temp_out_path], 
+                    stdout=subprocess.DEVNULL, 
+                    stderr=subprocess.DEVNULL,
+                    check=True
+                )
+                
+                # Read the new mp3 file back into memory
+                with open(temp_out_path, "rb") as f_out:
+                    audio_data_to_process = f_out.read()
+                
                 audio_file_extension = ".mp3"
+                
+                # Clean up the temporary files from the server
+                os.remove(temp_in_path)
+                os.remove(temp_out_path)
+                
             except Exception as e:
-                st.error(f"Failed to convert audio. Ensure ffmpeg is installed. Error: {e}")
+                st.error(f"Failed to convert audio. Ensure ffmpeg is in packages.txt. Error: {e}")
                 st.stop()
-    # --------------------------------------------------
+    # ----------------------------------------------------------------------
 
     progress_bar = st.progress(10, text="📦 Step 1/4: Preparing audio stream...")
     
