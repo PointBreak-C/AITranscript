@@ -306,7 +306,7 @@ if audio_data_to_process:
         
         try:
             response = client.chat.completions.create(
-                model="stealth/ox-alpha",
+                model="~z-ai/glm-flash-latest",
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"}
             )
