@@ -261,7 +261,7 @@ if audio_data_to_process:
         file_payload = (clean_filename, audio_data_to_process, mime_type)
         
         transcription = client.audio.transcriptions.create(
-            model="meta/muse-voice-transcribe-1.0",
+            model="microsoft/mai-transcribe-2",
             file=file_payload,
             response_format="json" 
         )
